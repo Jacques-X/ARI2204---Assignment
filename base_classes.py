@@ -82,13 +82,31 @@ class Dealer(Player):
         while self.getValue() < 17:
             self.hit(deck)
 
-class Round():
+class BlackJackEnv():
     def __init__(self):
         self.deck = Deck()
         self.player = Player(self.deck)
         self.dealer = Dealer(self.deck)
 
-    def playRound(self):
+    def get_state(self):
+        player_sum = self.player.getValue()
+        dealer_card = self.dealer.cards[0].getValue()
+        usable_ace = any(card.char == 'A' and card.value == 11 for card in self.player.cards)
+        return (player_sum, dealer_card, usable_ace)
+
+    def step(self, action):
+        if action == "hit":
+            self.player.hit(self.deck)
+            if self.player.isBusted():
+                return self.get_state(), -1, True
+            else:
+                return self.get_state(), 0, False
+        elif action == "stand":
+            self.dealer.playTurn(self.deck)
+            reward = self.calculate_reward()
+            return self.get_state(), reward, True
+
+    def playRound(self): # This mathod can be removed, only here to demonstrate working environment
         print("Your hand:", self.player.showHand())
         print("Dealer hand:", self.dealer.showHand())
         while not self.player.stands and not self.player.isBusted():
@@ -126,6 +144,22 @@ class Round():
             return "Dealer wins!"
         else:
             return "It's a tie!"
-        
-round = Round()
+
+    def calculate_reward(self):
+        if self.player.isBusted():
+            return -1
+        elif self.dealer.isBusted():
+            return 1
+        elif self.player.getValue() > self.dealer.getValue():
+            return 1
+        elif self.player.getValue() < self.dealer.getValue():
+            return -1
+        else:
+            return 0
+
+    def reset(self):
+        self.__init__()
+        return self.get_state()
+
+round = BlackJackEnv()
 round.playRound()
