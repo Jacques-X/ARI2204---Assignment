@@ -1,9 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import random # Import the random module
+import random
+import os # Import the os module
 from collections import defaultdict
 from rl_framework import BlackjackAgent
-from base_classes import BlackJackEnv # Assuming BlackJackEnv is in base_classes.py
+from base_classes import BlackJackEnv
+
+def safe_file_name(name):
+    """Replaces characters that could cause issues in file paths."""
+    return name.replace('/', '_').replace('\\', '_')
 
 def run_simulation(agent, env, algorithm, num_episodes, epsilon_strategy, exploring_starts=False):
     win_counts = []
@@ -45,7 +50,7 @@ def run_simulation(agent, env, algorithm, num_episodes, epsilon_strategy, explor
             elif final_reward == -1:
                 losses += 1
             else:
-                draws += 1
+                draws += 0 # Rewards for draw is 0, so it doesn't affect wins/losses count
 
 
         elif algorithm in ['sarsa', 'q_learning', 'double_q_learning']:
@@ -81,7 +86,7 @@ def run_simulation(agent, env, algorithm, num_episodes, epsilon_strategy, explor
             elif reward == -1:
                 losses += 1
             else:
-                draws += 1
+                draws += 1 # Count draws for TD methods
 
 
         # Record win/loss/draw counts every 1000 episodes
@@ -118,7 +123,11 @@ def plot_win_loss_draw(win_counts, loss_counts, draw_counts, algorithm, config_n
     plt.title(f'{algorithm} - {config_name}: Wins, Losses, and Draws over Episodes')
     plt.legend()
     plt.grid(True)
-    plt.savefig(f'{algorithm}_{config_name}_win_loss_draw.png')
+
+    # Create directory if it doesn't exist
+    save_dir = f'{algorithm}_{safe_file_name(config_name)}'
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(os.path.join(save_dir, 'win_loss_draw.png'))
     plt.close()
 
 def plot_state_action_counts(state_action_counts, algorithm, config_name):
@@ -134,7 +143,11 @@ def plot_state_action_counts(state_action_counts, algorithm, config_name):
     plt.title(f'{algorithm} - {config_name}: State-Action Pair Counts')
     plt.xticks(rotation=90)
     plt.tight_layout()
-    plt.savefig(f'{algorithm}_{config_name}_state_action_counts.png')
+
+    # Create directory if it doesn't exist
+    save_dir = f'{algorithm}_{safe_file_name(config_name)}'
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(os.path.join(save_dir, 'state_action_counts.png'))
     plt.close()
 
 def plot_unique_state_actions(unique_counts_per_config, algorithm):
@@ -148,8 +161,13 @@ def plot_unique_state_actions(unique_counts_per_config, algorithm):
     plt.title(f'{algorithm}: Total Unique State-Action Pairs Explored by Configuration')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
-    plt.savefig(f'{algorithm}_unique_state_actions.png')
+
+    # Create directory if it doesn't exist
+    save_dir = f'{algorithm}_unique_counts'
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(os.path.join(save_dir, 'unique_state_actions.png'))
     plt.close()
+
 
 def create_strategy_table(q_values, usable_ace):
     # Dealer card values: 2-11 (A=11)
@@ -236,9 +254,8 @@ if __name__ == "__main__":
 
     for algorithm in algorithms:
         unique_counts_for_algorithm = {}
-        configs_to_run = mc_epsilon_strategies if algorithm == 'monte_carlo' else td_epsilon_strategies
 
-        # Handle Monte Carlo with Exploring Starts separately
+        # Handle Monte Carlo with Exploring Starts separately (only with 1/k epsilon)
         if algorithm == 'monte_carlo':
             epsilon_strategy = '1/k'
             config_name = f'{epsilon_strategy}_es'
@@ -260,59 +277,55 @@ if __name__ == "__main__":
             print_strategy_table(strategy_table_no_ace, usable_ace=False)
             print_strategy_table(strategy_table_with_ace, usable_ace=True)
 
+        # Handle the remaining configurations for each algorithm (all are No Exploring Starts)
+        configs_to_run_no_es = mc_epsilon_strategies if algorithm == 'monte_carlo' else td_epsilon_strategies
+        if algorithm == 'monte_carlo' and '1/k' in configs_to_run_no_es:
+             # For MC, '1/k' in this loop means the No ES case.
+             # We need to make sure to run exp1 and exp2 for MC No ES as well.
+             pass # The loop below handles these
 
-        for epsilon_strategy in configs_to_run:
-            config_name = epsilon_strategy
-            exploring_starts = False
-
-            # Avoid running Monte Carlo 1/k No ES if we already handled ES for 1/k above,
-            # unless the config list was adjusted. Given the brief, MC 1/k should be ES.
-            # However, the brief also lists 3 other epsilon for MC without ES. Let's clarify this.
-            # Rereading point 2.3: "four different configurations. One with exploring starts, and three without."
-            # The three without are with epsilon=1/k, e^-k/1000, and e^-k/10000.
-            # So, MC needs: ES with 1/k, No ES with 1/k, No ES with exp1, No ES with exp2.
-            # Let's adjust the loops to match this precisely.
-
-            if algorithm == 'monte_carlo':
-                 # We handled ES with 1/k above. Now handle the three No ES cases.
-                 if epsilon_strategy == '1/k': # This is the No ES 1/k case for MC
-                    config_name = f'{epsilon_strategy}_no_es'
-                    exploring_starts = False # Explicitly No ES
-                 else: # exp1 and exp2 for MC No ES
+        for epsilon_strategy in configs_to_run_no_es:
+             # Determine config name and exploring_starts flag
+             if algorithm == 'monte_carlo':
+                  # MC No ES cases
+                  if epsilon_strategy == '1/k':
+                     config_name = f'{epsilon_strategy}_no_es'
+                  else: # exp1, exp2
                      config_name = epsilon_strategy
-                     exploring_starts = False # Explicitly No ES
-            else: # SARSA, Q-Learning, Double Q-Learning always have No ES
-                config_name = epsilon_strategy
-                exploring_starts = False # TD methods don't use Exploring Starts as defined in the brief
+                  exploring_starts = False
+             else:
+                 # TD methods (SARSA, Q-Learning, Double Q-Learning) - always No ES
+                 config_name = epsilon_strategy
+                 exploring_starts = False
 
-            # Skip the MC 1/k ES run here as it was handled before the loop
-            if algorithm == 'monte_carlo' and epsilon_strategy == '1/k' and not exploring_starts:
+             # Skip the MC 1/k ES run here as it was handled before the loop
+             if algorithm == 'monte_carlo' and epsilon_strategy == '1/k' and not exploring_starts:
                  # This is the MC 1/k No ES case - proceed
                  pass
-            elif algorithm == 'monte_carlo' and epsilon_strategy == '1/k' and exploring_starts:
+             elif algorithm == 'monte_carlo' and epsilon_strategy == '1/k' and exploring_starts:
                  # This case was handled above the loop, skip it here
                  continue
 
 
-            env = BlackJackEnv()
-            agent = BlackjackAgent()
-            print(f"Running {algorithm} - {config_name}...")
-            win_counts, loss_counts, draw_counts, unique_state_actions, state_action_counts, q_values = run_simulation(
-                 agent, env, algorithm, num_episodes, epsilon_strategy, exploring_starts=exploring_starts
-            )
-            plot_win_loss_draw(win_counts, loss_counts, draw_counts, algorithm, config_name)
-            plot_state_action_counts(state_action_counts, algorithm, config_name)
-            unique_counts_for_algorithm[config_name] = len(unique_state_actions)
-            all_unique_state_action_counts[algorithm][config_name] = len(unique_state_actions)
-            dealer_advantage = calculate_dealer_advantage(win_counts, loss_counts)
-            dealer_advantages[algorithm][config_name] = dealer_advantage
+             env = BlackJackEnv()
+             agent = BlackjackAgent()
+             print(f"Running {algorithm} - {config_name}...")
+             win_counts, loss_counts, draw_counts, unique_state_actions, state_action_counts, q_values = run_simulation(
+                  agent, env, algorithm, num_episodes, epsilon_strategy, exploring_starts=exploring_starts
+             )
+             plot_win_loss_draw(win_counts, loss_counts, draw_counts, algorithm, config_name)
+             plot_state_action_counts(state_action_counts, algorithm, config_name)
+             unique_counts_for_algorithm[config_name] = len(unique_state_actions)
+             all_unique_state_action_counts[algorithm][config_name] = len(unique_state_actions)
+             dealer_advantage = calculate_dealer_advantage(win_counts, loss_counts)
+             dealer_advantages[algorithm][config_name] = dealer_advantage
 
-            # Create and print strategy tables
-            strategy_table_no_ace = create_strategy_table(q_values, usable_ace=False)
-            strategy_table_with_ace = create_strategy_table(q_values, usable_ace=True)
-            print(f"\n--- {algorithm} - {config_name} Strategy Tables ---")
-            print_strategy_table(strategy_table_no_ace, usable_ace=False)
-            print_strategy_table(strategy_table_with_ace, usable_ace=True)
+             # Create and print strategy tables
+             strategy_table_no_ace = create_strategy_table(q_values, usable_ace=False)
+             strategy_table_with_ace = create_strategy_table(q_values, usable_ace=True)
+             print(f"\n--- {algorithm} - {config_name} Strategy Tables ---")
+             print_strategy_table(strategy_table_no_ace, usable_ace=False)
+             print_strategy_table(strategy_table_with_ace, usable_ace=True)
 
 
         # Plot unique state-action pairs for the current algorithm across its configurations
@@ -324,10 +337,14 @@ if __name__ == "__main__":
     # Collect all config names and advantages
     all_configs = []
     all_advantages = []
-    for algorithm in algorithms:
-        for config_name, advantage in dealer_advantages[algorithm].items():
+    # Ensure a consistent order for plotting
+    sorted_algorithms = sorted(dealer_advantages.keys())
+    for algorithm in sorted_algorithms:
+        # Sort configurations for consistent plotting
+        sorted_configs = sorted(dealer_advantages[algorithm].keys())
+        for config_name in sorted_configs:
             all_configs.append(f"{algorithm}-{config_name}")
-            all_advantages.append(advantage)
+            all_advantages.append(dealer_advantages[algorithm][config_name])
 
 
     plt.bar(all_configs, all_advantages)

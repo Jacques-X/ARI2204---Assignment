@@ -88,8 +88,6 @@ class BlackjackAgent:
 
 
     # 2.3 Monte Carlo On-Policy Control
-    # This method is designed to be called to run a single episode and return it for external processing
-    # The update logic for Monte Carlo is handled in the evaluation script after the episode
     def generate_episode_monte_carlo(self, env, epsilon_strategy, exploring_start=False):
         episode = []
         state = env.reset()
@@ -114,7 +112,6 @@ class BlackjackAgent:
         return episode
 
     # 2.4 SARSA On-Policy Control
-    # This method runs a single step and performs updates step by step
     def step_sarsa(self, env, state, action, epsilon_strategy):
         next_state, reward, done = env.step(action)
         next_state_key = self.get_state_key(next_state)
@@ -143,7 +140,6 @@ class BlackjackAgent:
         return next_state, next_action, reward, done
 
     # 2.5 Q-Learning (SARSAMAX) Off-Policy Control
-    # This method runs a single step and performs the Q-learning update
     def step_q_learning(self, env, state, action, epsilon_strategy):
         next_state, reward, done = env.step(action)
         next_state_key = self.get_state_key(next_state)
@@ -172,7 +168,6 @@ class BlackjackAgent:
 
 
     # 2.6 Double Q-Learning Off-Policy Control
-    # This method runs a single step and performs the Double Q-learning update
     def step_double_q_learning(self, env, state, action, epsilon_strategy):
         next_state, reward, done = env.step(action)
         next_state_key = self.get_state_key(next_state)

@@ -160,6 +160,3 @@ class BlackJackEnv():
     def reset(self):
         self.__init__()
         return self.get_state()
-
-round = BlackJackEnv()
-round.playRound()
