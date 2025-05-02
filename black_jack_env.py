@@ -4,22 +4,22 @@ class Card():
     def __init__(self, char):
         self.char = char
         self.value = self.assignValue()
-    
+
     def assignValue(self):
         if(self.char.isdigit()):
             return int(self.char)
         else:
             return 10
-        
+
     def getValue(self):
         return self.value
-    
+
 class Ace(Card):
     def __init__(self, char='A'):
         super().__init__(char)
         self.value = 11
 
-    def switchValue11(self):    
+    def switchValue11(self):
         self.value = 11
 
     def switchValue1(self):
@@ -42,7 +42,7 @@ class Deck():
                     card = Card('K')
                 self.cards.append(card)
         self.shuffle()
-    
+
     def shuffle(self):
         random.shuffle(self.cards)
 
@@ -69,7 +69,7 @@ class Player():
 
     def isBusted(self):
         return self.getValue() > 21
-    
+
     def showHand(self):
         return [(card.char, card.value) for card in self.cards]
 
@@ -106,7 +106,7 @@ class BlackJackEnv():
             reward = self.calculate_reward()
             return self.get_state(), reward, True
 
-    def playRound(self): # This mathod can be removed, only here to demonstrate working environment
+    def playRound(self):
         print("Your hand:", self.player.showHand())
         print("Dealer hand:", self.dealer.showHand())
         while not self.player.stands and not self.player.isBusted():
@@ -124,8 +124,7 @@ class BlackJackEnv():
             print("You busted! Dealer wins.")
             return
 
-        # Dealer's turn
-        print("\nDealer's turn...")
+        print("Dealer's turn...")
         self.dealer.playTurn(self.deck)
         print("Dealer's hand:", self.dealer.showHand(), "Value:", self.dealer.getValue())
 

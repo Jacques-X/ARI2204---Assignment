@@ -1,27 +1,21 @@
-# evaluation.py
-
+from implementation import BlackjackAgent
+from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
-import os
-from collections import defaultdict
 import random
+import os
 
-# Import the BlackjackAgent from the implementation file
-from implementation import BlackjackAgent
-
-# Import the Blackjack Environment class from base_classes.py (assumed to exist)
-# This class contains the Card, Deck, Player, and Dealer definitions.
 try:
     from black_jack_env import BlackJackEnv
 except ImportError:
     print("Error: Could not import BlackJackEnv from base_classes.py.")
     print("Please ensure base_classes.py is in the same directory and contains the BlackJackEnv class.")
+
     # Exit or use a dummy environment if necessary for structural checks
     class BlackJackEnv:
          def __init__(self): print("Dummy BlackJackEnv initialized. Simulation will not run.")
          def reset(self): print("Dummy reset."); return (12, 2, False)
          def step(self, action): print(f"Dummy step with {action}."); return (12, 2, False), 0, True
-
 
 # Helper function to create safe filenames for saving plots/results
 def safe_file_name(name):
@@ -29,50 +23,18 @@ def safe_file_name(name):
     # Added more replacements for common problematic characters
     return name.replace('/', '_').replace('\\', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_').replace(' ', '_').replace('=', '_')
 
-
-# --- Simulation Runner Function (Based on parts of original evaluate.py and PDF Point 3) ---
-
+# --- Simulation Runner Function ---
 def run_simulation(agent, env, algorithm, num_episodes, epsilon_strategy, exploring_starts=False):
-    """
-    Runs a simulation of the specified RL algorithm in the Blackjack environment
-    for a given number of episodes and collects evaluation data.
-
-    This function is responsible for the interaction loop between the agent and the environment,
-    episode management, action selection during the simulation, and collecting the metrics
-    required for evaluation (wins/losses/draws, state-action counts, final Q-values).
-    It calls the algorithm-specific update methods implemented in the Agent class.
-
-    Aligns with PDF Point 3, specifically "Run each algorithm configuration..." and
-    extracting information (items 1-4).
-
-    Args:
-        agent: The BlackjackAgent instance from implementation.py.
-        env: The BlackJackEnv instance from base_classes.py.
-        algorithm (str): The name of the algorithm ('monte_carlo', 'sarsa', 'q_learning', 'double_q_learning').
-        num_episodes (int): The total number of episodes to run.
-        epsilon_strategy (str): The epsilon decay strategy ('constant', '1/k', 'exp1', 'exp2').
-        exploring_starts (bool): Whether to use exploring starts (primarily for Monte Carlo).
-
-    Returns:
-        tuple: A tuple containing:
-            - win_counts_1k (list): List of wins per 1000 episodes.
-            - loss_counts_1k (list): List of losses per 1000 episodes.
-            - draw_counts_1k (list): List of draws per 1000 episodes.
-            - unique_state_actions (set): Set of unique (state_key, action) pairs encountered over all episodes.
-            - state_action_counts (defaultdict): Counts of each (state_key, action) pair over all episodes.
-            - q_values_at_end (dict): Final Q-values for all encountered learning state-action pairs after all episodes.
-                                      (For Double Q-Learning, this contains the average Q-values).
-    """
-    # Lists to store win, loss, and draw counts to be reported every 1000 episodes [cite: 59]
+    # Lists to store win, loss, and draw counts to be reported every 1000 episodes
     win_counts_1k = []
     loss_counts_1k = []
     draw_counts_1k = []
 
-    # Sets and dictionaries to track unique state-actions and their counts over the whole simulation [cite: 60, 61]
+    # Sets and dictionaries to track unique state-actions and their counts over the whole simulation
     unique_state_actions = set()
     state_action_counts = defaultdict(int)
 
-    # Dictionary to store final Q-values - will be populated after the simulation loop [cite: 62]
+    # Dictionary to store final Q-values - will be populated after the simulation loop
     q_values_at_end = {}
 
     # Counters for wins, losses, and draws within the current 1000-episode block
@@ -84,17 +46,14 @@ def run_simulation(agent, env, algorithm, num_episodes, epsilon_strategy, explor
     for i in range(1, num_episodes + 1):
         agent.episode_count = i # Update episode count for epsilon decay calculation
 
-        # Reset environment for a new episode (gets a new shuffled deck) [cite: 35]
+        # Reset environment for a new episode (gets a new shuffled deck)
         state = env.reset()
         done = False
         episode_data_mc = [] # To store (state, action, reward) tuples for Monte Carlo updates (after episode)
 
-        # Determine the first action of the episode based on algorithm and exploring_starts
-        # Exploring starts applies only to the very first action of an episode in Monte Carlo ES [cite: 42]
-        # and only if the initial state is a learning state (player sum 12-20).
         initial_state_key = agent.get_state_key(state)
         if algorithm == 'monte_carlo' and exploring_starts and initial_state_key is not None:
-             action = random.choice(['hit', 'stand']) # Random action for exploring starts [cite: 42]
+             action = random.choice(['hit', 'stand']) # Random action for exploring starts
         else:
             # For all other cases (MC without ES, SARSA, Q-Learning, Double Q-Learning),
             # choose the first action based on the epsilon-greedy policy.
@@ -108,21 +67,21 @@ def run_simulation(agent, env, algorithm, num_episodes, epsilon_strategy, explor
             # Get the state key for the current state. This is used for tracking and updates for states 12-20.
             state_key = agent.get_state_key(state)
 
-            # Record the state-action pair encountered during the episode, but only for learning states (12-20) [cite: 60, 61]
+            # Record the state-action pair encountered during the episode, but only for learning states
             if state_key is not None:
-                 unique_state_actions.add((state_key, action)) # Track unique state-action pairs [cite: 60]
-                 state_action_counts[(state_key, action)] += 1 # Count occurrences of each state-action pair [cite: 61]
+                 unique_state_actions.add((state_key, action)) # Track unique state-action pairs
+                 state_action_counts[(state_key, action)] += 1 # Count occurrences of each state-action pair
 
             # Take the action in the environment and observe the next state and reward
             next_state, reward, done = env.step(action)
 
             # Perform algorithm-specific updates and determine the next action for the *next* step
             if algorithm == 'monte_carlo':
-                # For MC, we store episode data (state, action, reward) and perform updates *after* the episode ends [cite: 39]
+                # For MC, we store episode data (state, action, reward) and perform updates *after* the episode ends
                 episode_data_mc.append((state, action, reward))
                 state = next_state # Update state for the next iteration in the loop
                 if not done:
-                    # The next action is chosen by the epsilon-greedy policy for subsequent steps in MC [cite: 43, 44]
+                    # The next action is chosen by the epsilon-greedy policy for subsequent steps in MC
                     action = agent.choose_action(state, epsilon_strategy, exploring_start=False) # Exploring starts only for the first action
 
             elif algorithm == 'sarsa':
@@ -151,11 +110,9 @@ def run_simulation(agent, env, algorithm, num_episodes, epsilon_strategy, explor
 
 
             elif algorithm == 'double_q_learning':
-                 # For Double Q-Learning, we perform the update to either Q1 or Q2 randomly
                  agent.double_q_learning_update(state, action, reward, next_state)
                  state = next_state # Update state for the next iteration
                  if not done:
-                     # Choose the next action using the epsilon-greedy policy based on average Q-values (Behavior Policy)
                      action = agent.choose_action_double_q(state, epsilon_strategy)
                  else:
                      action = None # No action from a terminal state
@@ -163,28 +120,28 @@ def run_simulation(agent, env, algorithm, num_episodes, epsilon_strategy, explor
 
         # --- End of Episode ---
 
-        # After the episode is done, perform Monte Carlo update if applicable [cite: 39, 40]
+        # After the episode is done, perform Monte Carlo update if applicable
         if algorithm == 'monte_carlo':
             agent.mc_update(episode_data_mc)
-            # The final reward for MC can be considered the reward from the last step in the episode data [cite: 38]
+            # The final reward for MC can be considered the reward from the last step in the episode data
             final_episode_reward = episode_data_mc[-1][2] if episode_data_mc else 0
 
         elif algorithm in ['sarsa', 'q_learning', 'double_q_learning']:
-            # For TD methods, the reward received when transitioning to the terminal state is the final reward [cite: 38]
+            # For TD methods, the reward received when transitioning to the terminal state is the final reward
              final_episode_reward = reward
 
 
-        # Update win, loss, and draw counts for the current 1000-episode block [cite: 59]
+        # Update win, loss, and draw counts for the current 1000-episode block
         if final_episode_reward == 1:
             current_1k_wins += 1
         elif final_episode_reward == -1:
             current_1k_losses += 1
-        # Draws have a reward of 0 [cite: 38]
+        # Draws have a reward of 0
         else: # final_episode_reward == 0
             current_1k_draws += 1
 
 
-        # Record win/loss/draw counts every 1000 episodes [cite: 59]
+        # Record win/loss/draw counts every 1000 episodes
         if i % 1000 == 0:
             win_counts_1k.append(current_1k_wins)
             loss_counts_1k.append(current_1k_losses)
@@ -195,8 +152,8 @@ def run_simulation(agent, env, algorithm, num_episodes, epsilon_strategy, explor
             current_1k_draws = 0
 
 
-    # After all episodes, prepare final Q-values for reporting [cite: 62]
-    # For Double Q-Learning, calculate the average Q-values into agent.q_values first [cite: 54]
+    # After all episodes, prepare final Q-values for reporting
+    # For Double Q-Learning, calculate the average Q-values into agent.q_values first
     if algorithm == 'double_q_learning':
         agent.calculate_double_q_average()
 
@@ -208,16 +165,12 @@ def run_simulation(agent, env, algorithm, num_episodes, epsilon_strategy, explor
              q_values_at_end[state_key][action] = agent.q_values[state_key][action]
 
 
-    # Return the collected data for evaluation and reporting [cite: 59, 60, 61, 62]
+    # Return the collected data for evaluation and reporting
     return win_counts_1k, loss_counts_1k, draw_counts_1k, unique_state_actions, state_action_counts, q_values_at_end
 
-# --- Plotting Functions (Aligning with PDF Point 3, items 5, 6, 7) ---
+# --- Plotting Functions ---
 
-def plot_win_loss_draw(win_counts, loss_counts, draw_counts, algorithm, config_name):
-    """
-    Plots wins, losses, and draws per 1000 episodes over the course of training.
-    Aligns with PDF Point 3, item 5.
-    """
+def plot_win_loss_draw(win_counts, loss_counts, draw_counts, algorithm, config_name, main_folder):
     episodes = np.arange(1000, (len(win_counts) + 1) * 1000, 1000)
     plt.figure(figsize=(12, 6))
     plt.plot(episodes, win_counts, label='Wins')
@@ -230,16 +183,12 @@ def plot_win_loss_draw(win_counts, loss_counts, draw_counts, algorithm, config_n
     plt.grid(True)
 
     # Create directory if it doesn't exist and save the plot
-    save_dir = f'{algorithm}_{safe_file_name(config_name)}'
+    save_dir = os.path.join(main_folder, 'individual_plots', f'{algorithm}_{safe_file_name(config_name)}')
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(os.path.join(save_dir, 'win_loss_draw.png'))
     plt.close()
 
-def plot_state_action_counts(state_action_counts, algorithm, config_name):
-    """
-    Plots the counts of each unique state-action pair encountered during training.
-    Aligns with PDF Point 3, item 6.
-    """
+def plot_state_action_counts(state_action_counts, algorithm, config_name, main_folder):
     # Sort by count in descending order, then by state key and action for ties
     # Converting state_key tuple to string for reliable sorting as secondary key
     sorted_counts = sorted(state_action_counts.items(), key=lambda item: (-item[1], str(item[0]), item[1]))
@@ -257,16 +206,12 @@ def plot_state_action_counts(state_action_counts, algorithm, config_name):
     plt.tight_layout()
 
     # Create directory if it doesn't exist and save the plot
-    save_dir = f'{algorithm}_{safe_file_name(config_name)}'
+    save_dir = os.path.join(main_folder, 'individual_plots', f'{algorithm}_{safe_file_name(config_name)}')
     os.makedirs(save_dir, exist_ok=True)
     plt.savefig(os.path.join(save_dir, 'state_action_counts.png'))
     plt.close()
 
-def plot_unique_state_actions(unique_counts_per_config, algorithm):
-    """
-    Plots the total number of unique state-action pairs explored across configurations for an algorithm.
-    Aligns with PDF Point 3, item 7.
-    """
+def plot_unique_state_actions(unique_counts_per_config, algorithm, main_folder):
     # Sort configurations for consistent plotting
     sorted_configs = sorted(unique_counts_per_config.keys())
     configs = sorted_configs
@@ -281,20 +226,15 @@ def plot_unique_state_actions(unique_counts_per_config, algorithm):
     plt.tight_layout()
 
     # Create directory if it doesn't exist and save the plot
-    save_dir = f'{algorithm}_unique_counts'
+    save_dir = os.path.join(main_folder, 'comparison_plots')
     os.makedirs(save_dir, exist_ok=True)
-    plt.savefig(os.path.join(save_dir, 'unique_state_actions.png'))
+    plt.savefig(os.path.join(save_dir, f'{algorithm}_unique_state_actions.png'))
     plt.close()
 
 
-# --- Strategy Table Functions (Aligning with PDF Point 3, item 8) ---
+# --- Strategy Table Functions---
 
 def create_strategy_table(q_values, usable_ace):
-    """
-    Creates a strategy table (player sum vs. dealer card) based on learned Q-values.
-    Indicates 'H' for Hit and 'S' for Stand.
-    Aligns with PDF Point 3, item 8.
-    """
     # Dealer card values: 2-11 (A=11)
     # Player sum values: 12-20 (as per learning range)
     player_sums = list(range(12, 21))
@@ -324,7 +264,7 @@ def create_strategy_table(q_values, usable_ace):
                 elif q_stand > q_hit:
                     action = 'S' # Stand has a higher Q-value
                 else:
-                    action = 'S' # Break ties by standing (common practice in Blackjack basic strategy) [cite: 67]
+                    action = 'S' # Break ties by standing (common practice in Blackjack basic strategy)
 
             # Store the determined action in the strategy table
             strategy_table[player_sum][dealer_cards_map[dealer_card_value]] = action
@@ -332,7 +272,6 @@ def create_strategy_table(q_values, usable_ace):
     return strategy_table
 
 def print_strategy_table(strategy_table, usable_ace, algorithm, config_name):
-    """Prints the strategy table in a formatted way."""
     print(f"\n--- {algorithm} - {safe_file_name(config_name)} Strategy Table (Usable Ace: {usable_ace}) ---")
     # Create the header row for the table (Player Sum and Dealer Card values)
     dealer_cards_header = ["Player Sum"] + list(range(2, 11)) + ['A']
@@ -352,14 +291,9 @@ def print_strategy_table(strategy_table, usable_ace, algorithm, config_name):
              row.append(strategy_table[player_sum].get(dealer_card_header, '-'))
         print(" | ".join(map(str, row)))
 
-# --- Dealer Advantage Calculation (Aligning with PDF Point 3, item 8) ---
+# --- Dealer Advantage Calculation  ---
 
 def calculate_dealer_advantage(win_counts_1k, loss_counts_1k):
-    """
-    Calculates the dealer advantage using the formula (l - w) / (l + w)
-    based on the mean wins and losses over the last 10,000 episodes.
-    Aligns with PDF Point 3, item 8. [cite: 68]
-    """
     # win_counts_1k and loss_counts_1k contain counts per 1000 episodes.
     # We need the mean over the last 10,000 episodes, which is the sum over the last 10 intervals of 1000 episodes.
 
@@ -378,14 +312,18 @@ def calculate_dealer_advantage(win_counts_1k, loss_counts_1k):
     if total_hands == 0:
         return 0.0 # Avoid division by zero if no relevant hands occurred in the last 10k episodes
     else:
-        # Calculate the dealer advantage using the formula (l - w) / (l + w) [cite: 68]
+        # Calculate the dealer advantage using the formula (l - w) / (l + w)
         return (last_10k_losses - last_10k_wins) / total_hands
 
 
-# --- Main Evaluation Execution Block (Orchestrates simulations and reporting) ---
+# --- Main Evaluation Execution Block  ---
 
 if __name__ == "__main__":
-    num_episodes = 100000 # Total number of episodes to run for each configuration [cite: 46, 47, 49, 50, 55, 58]
+    num_episodes = 100000 # Total number of episodes to run for each configuration
+    main_plots_folder = "blackjack_plots" # Define the main folder name
+
+    # Create the main plots folder if it doesn't exist
+    os.makedirs(main_plots_folder, exist_ok=True)
 
     # Define epsilon strategies for each algorithm as per the brief
     # Monte Carlo: 1/k (ES), 1/k (No ES), exp1, exp2
@@ -393,23 +331,23 @@ if __name__ == "__main__":
     mc_epsilon_strategies = ['1/k', 'exp1', 'exp2']
     td_epsilon_strategies = ['constant', '1/k', 'exp1', 'exp2']
 
-    algorithms = ['monte_carlo', 'sarsa', 'q_learning', 'double_q_learning'] # Algorithms to evaluate [cite: 57]
+    algorithms = ['monte_carlo', 'sarsa', 'q_learning', 'double_q_learning'] # Algorithms to evaluate
 
     # Dictionaries to store results for final comparison plots and reporting
-    dealer_advantages = defaultdict(dict) # To store dealer advantage for each config [cite: 68]
-    all_unique_state_action_counts = defaultdict(dict) # To store unique state-action counts for each config [cite: 60]
+    dealer_advantages = defaultdict(dict) # To store dealer advantage for each config
+    all_unique_state_action_counts = defaultdict(dict) # To store unique state-action counts for each config
 
     # Iterate through each algorithm to be evaluated
     for algorithm in algorithms:
-        unique_counts_for_algorithm = {} # Temporary storage for unique counts per config within this algorithm (for plotting item 7) [cite: 65]
+        unique_counts_for_algorithm = {} # Temporary storage for unique counts per config within this algorithm (for plotting item 7)
         configs_to_run = [] # List to hold configuration dictionaries for the current algorithm
 
         # Define the specific configurations to run for each algorithm based on the brief
         if algorithm == 'monte_carlo':
             # Monte Carlo configurations:
-            # 1. Exploring Starts with epsilon=1/k [cite: 42]
+            # 1. Exploring Starts with epsilon=1/k
             configs_to_run.append({'epsilon': '1/k', 'exploring_starts': True})
-            # 2. No Exploring Starts with epsilon=1/k, exp1, exp2 [cite: 44]
+            # 2. No Exploring Starts with epsilon=1/k, exp1, exp2
             for strat in mc_epsilon_strategies:
                  configs_to_run.append({'epsilon': strat, 'exploring_starts': False})
 
@@ -460,34 +398,34 @@ if __name__ == "__main__":
 
             # --- Perform Evaluation and Reporting for this Configuration (Point 3) ---
 
-            # Plot wins, losses, and draws over episodes [cite: 63]
-            plot_win_loss_draw(win_counts_1k, loss_counts_1k, draw_counts_1k, algorithm, config_name)
+            # Plot wins, losses, and draws over episodes
+            plot_win_loss_draw(win_counts_1k, loss_counts_1k, draw_counts_1k, algorithm, config_name, main_plots_folder)
 
-            # Plot state-action counts [cite: 64]
-            plot_state_action_counts(state_action_counts, algorithm, config_name)
+            # Plot state-action counts
+            plot_state_action_counts(state_action_counts, algorithm, config_name, main_plots_folder)
 
-            # Record unique state-action counts for later plotting across configurations [cite: 65]
+            # Record unique state-action counts for later plotting across configurations
             unique_counts_for_algorithm[config_name] = len(unique_state_actions)
             all_unique_state_action_counts[algorithm][config_name] = len(unique_state_actions)
 
-            # Calculate and record dealer advantage for later plotting [cite: 68]
+            # Calculate and record dealer advantage for later plotting
             dealer_advantage = calculate_dealer_advantage(win_counts_1k, loss_counts_1k)
             dealer_advantages[algorithm][config_name] = dealer_advantage
 
-            # Create and print strategy tables based on final Q-values [cite: 67]
+            # Create and print strategy tables based on final Q-values
             strategy_table_no_ace = create_strategy_table(q_values, usable_ace=False)
             strategy_table_with_ace = create_strategy_table(q_values, usable_ace=True)
             print_strategy_table(strategy_table_no_ace, usable_ace=False, algorithm=algorithm, config_name=config_name)
             print_strategy_table(strategy_table_with_ace, usable_ace=True, algorithm=algorithm, config_name=config_name)
 
 
-        # After running all configurations for an algorithm, plot unique state-action pairs explored [cite: 65]
-        plot_unique_state_actions(unique_counts_for_algorithm, algorithm)
+        # After running all configurations for an algorithm, plot unique state-action pairs explored
+        plot_unique_state_actions(unique_counts_for_algorithm, algorithm, main_plots_folder)
 
 
-    # --- Final Comparison Plots and Reporting (Aggregating results across algorithms/configs) ---
+    # --- Final Comparison Plots and Reporting ---
 
-    # Plot dealer advantage for all algorithm configurations on one chart [cite: 68]
+    # Plot dealer advantage for all algorithm configurations on one chart
     plt.figure(figsize=(15, 7))
     # Collect all config names and advantages for the plot in a consistent order
     all_configs = []
@@ -511,7 +449,11 @@ if __name__ == "__main__":
     plt.xticks(rotation=45, ha='right') # Rotate x-axis labels for readability
     plt.grid(axis='y', linestyle='--') # Add a dashed grid on the y-axis
     plt.tight_layout() # Adjust layout to prevent labels overlapping
-    plt.savefig('dealer_advantage_comparison.png') # Save the plot
+
+    # Save the comparison plot in the comparison_plots subfolder within the main folder
+    comparison_plot_path = os.path.join(main_plots_folder, 'comparison_plots', 'dealer_advantage_comparison.png')
+    os.makedirs(os.path.dirname(comparison_plot_path), exist_ok=True)
+    plt.savefig(comparison_plot_path)
     plt.close() # Close the plot figure
 
     # Print final summary results to the console

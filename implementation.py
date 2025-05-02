@@ -1,16 +1,8 @@
-# implementation.py
-
+from collections import defaultdict
 import random
 import math
-from collections import defaultdict
 
-# Note: This file contains the RL Agent implementation (Point 2.2 onwards).
-# The Blackjack Environment classes (Card, Deck, Player, Dealer, BlackJackEnv)
-# which are part of Point 2.1, are assumed to be in a separate file (e.g., base_classes.py)
-# and are not included here based on the user's specific splitting instruction.
-
-
-# --- Class for Reinforcement Learning Agent (Based on original rl_framework.py and PDF Point 2.2 - 2.6) ---
+# --- Class for Reinforcement Learning Agent ---
 
 class BlackjackAgent:
     def __init__(self):
@@ -23,10 +15,6 @@ class BlackjackAgent:
         self.episode_count = 0 # To track episode number for epsilon decay
 
     def get_state_key(self, state):
-        """
-        Defines the state representation used by the agent for learning.
-        Filters states to the learning range [12..20] as per PDF Point 2.2 and 2.2.1.
-        """
         player_sum, dealer_card, usable_ace = state
         # The agent only learns for player sums between 12 and 20
         if 12 <= player_sum <= 20:
@@ -36,10 +24,6 @@ class BlackjackAgent:
 
 
     def get_epsilon(self, epsilon_strategy):
-        """
-        Calculates the epsilon value based on the chosen strategy and episode count.
-        Aligns with the epsilon decay strategies mentioned in PDF Points 2.3, 2.4, 2.5, 2.6.
-        """
         k = self.episode_count
         if epsilon_strategy == 'constant':
             return 0.1 # Constant epsilon = 0.1
@@ -54,12 +38,6 @@ class BlackjackAgent:
             return 0.1 # Default to constant epsilon if strategy is unrecognized
 
     def choose_action(self, state, epsilon_strategy, exploring_start=False):
-        """
-        Chooses an action ('hit' or 'stand') based on the current state and epsilon-greedy policy.
-        Handles fixed actions for sums < 12 or == 21.
-        Supports Exploring Starts for the very first action of an episode (for Monte Carlo ES).
-        Aligns with PDF Point 2.2, 2.3, 2.4, 2.5.
-        """
         player_sum, _, _ = state
         state_key = self.get_state_key(state)
 
@@ -80,9 +58,6 @@ class BlackjackAgent:
         if random.random() < epsilon:
             return random.choice(['hit', 'stand']) # Choose randomly with probability epsilon
         else:
-            # Choose greedily based on current Q-values
-            # Need to handle cases where a state_key or action hasn't been encountered yet
-            # Use 0.0 as a default value for unseen state-action pairs
             q_hit = self.q_values.get(state_key, {}).get('hit', 0.0)
             q_stand = self.q_values.get(state_key, {}).get('stand', 0.0)
 
@@ -93,14 +68,9 @@ class BlackjackAgent:
             else:
                 return random.choice(['hit', 'stand']) # Break ties randomly
 
-    # Define the action to take for Double Q-Learning based on the average Q-values (behavior policy)
+    # Define the action to take for Double Q-Learning based on the average Q-values 
     # This is the behavior policy for Double Q-Learning
     def choose_action_double_q(self, state, epsilon_strategy):
-        """
-        Chooses an action for Double Q-Learning based on the average of Q1 and Q2.
-        This is the behavior policy (epsilon-greedy) for Double Q-Learning.
-        Aligns with PDF Point 2.6.
-        """
         player_sum, _, _ = state
         state_key = self.get_state_key(state)
 
@@ -132,28 +102,15 @@ class BlackjackAgent:
             else:
                 return random.choice(['hit', 'stand']) # Break ties randomly
 
-
     # Helper to ensure state_key and action exist in Q dictionaries for updates
-    # This prevents KeyError when accessing Q values for states/actions not yet encountered.
     def _ensure_q_entry(self, q_dict, state_key, action):
         if state_key not in q_dict:
             q_dict[state_key] = {'hit': 0.0, 'stand': 0.0}
         if action not in q_dict[state_key]:
              q_dict[state_key][action] = 0.0
 
-    # --- Algorithm Update Methods (Aligning with PDF Point 2.3, 2.4, 2.5, 2.6) ---
-
-    # Monte Carlo On-Policy Control Update (First-Visit) - Performed *after* the episode
-    # Expects a list of (state, action, reward) tuples for the entire episode.
-    # Updates Q-values for the *first* occurrence of each state-action pair in the episode.
-    # Aligns with PDF Point 2.3.
+    # --- Algorithm Update Methods ---
     def mc_update(self, episode_data):
-        """
-        Performs the First-Visit Monte Carlo update for a single episode.
-        Updates Q-values for the first occurrence of each (state, action) pair in the episode.
-        Uses alpha = 1 / N(s,a).
-        Aligns with PDF Point 2.3.
-        """
         # Track visited state-action pairs within this episode for first-visit
         visited_states_actions = set()
         # Calculate the return G from the end of the episode (gamma=1)
@@ -161,11 +118,11 @@ class BlackjackAgent:
         # Iterate backwards through the episode data to calculate returns
         for t in range(len(episode_data) - 1, -1, -1):
             state_t, action_t, reward_t = episode_data[t]
-            G += reward_t # Return G_t is the sum of rewards from step t onwards (gamma=1 as per PDF Point 2.2.3)
+            G += reward_t # Return G_t is the sum of rewards from step t onwards 
 
             state_key_t = self.get_state_key(state_t)
 
-            # Only perform update if it's a learning state [12..20]
+            # Only perform update if it's a learning state
             if state_key_t is not None:
                 # Check if this is the first visit to (state_t, action_t) in this episode
                 if (state_key_t, action_t) not in visited_states_actions:
@@ -176,7 +133,6 @@ class BlackjackAgent:
                     # Increment visit count for (S_t, A_t)
                     self.visit_counts[state_key_t][action_t] += 1
                     # Calculate step size alpha = 1 / N(S_t, A_t) for standard MC.
-                    # Note: PDF specifies alpha=1/(N(s,a)+1) for TD methods, but doesn't explicitly state for MC.
                     # Using 1/N(s,a) is standard for MC First-Visit control.
                     alpha = 1 / self.visit_counts[state_key_t][action_t]
 
@@ -188,14 +144,7 @@ class BlackjackAgent:
 
 
     # SARSA On-Policy Control Update - Performed *at each step*
-    # Expects current state (S), action (A), reward (R), next state (S'), and next action (A').
-    # Aligns with PDF Point 2.4.
     def sarsa_update(self, state, action, reward, next_state, next_action):
-        """
-        Performs the SARSA update using (S, A, R, S', A').
-        Uses alpha = 1 / (N(s,a) + 1) and gamma = 1.
-        Aligns with PDF Point 2.4.
-        """
         state_key = self.get_state_key(state)
         next_state_key = self.get_state_key(next_state)
 
@@ -223,16 +172,8 @@ class BlackjackAgent:
             self.q_values[state_key][action] += alpha * (reward + q_next - self.q_values[state_key][action])
 
 
-    # Q-Learning (SARSAMAX) Off-Policy Control Update - Performed *at each step*
-    # Expects current state (S), action (A), reward (R), and next state (S').
-    # Uses the max Q value of the next state for the target (Off-Policy).
-    # Aligns with PDF Point 2.5.
+    # Q-Learning (SARSAMAX) Off-Policy Control Update=
     def q_learning_update(self, state, action, reward, next_state):
-        """
-        Performs the Q-Learning (SARSAMAX) update.
-        Uses alpha = 1 / (N(s,a) + 1) and gamma = 1.
-        Aligns with PDF Point 2.5.
-        """
         state_key = self.get_state_key(state)
         next_state_key = self.get_state_key(next_state)
 
@@ -260,16 +201,8 @@ class BlackjackAgent:
             # With gamma = 1
             self.q_values[state_key][action] += alpha * (reward + max_q_next - self.q_values[state_key][action])
 
-    # Double Q-Learning Off-Policy Control Update - Performed *at each step*
-    # Expects current state (S), action (A), reward (R), and next state (S').
-    # Updates either Q1 or Q2 randomly, using the other Q network for the target.
-    # Aligns with PDF Point 2.6.
+    # Double Q-Learning Off-Policy Control Update 
     def double_q_learning_update(self, state, action, reward, next_state):
-        """
-        Performs the Double Q-Learning update to either Q1 or Q2.
-        Uses alpha = 1 / (N(s,a) + 1) and gamma = 1.
-        Aligns with PDF Point 2.6.
-        """
         state_key = self.get_state_key(state)
         next_state_key = self.get_state_key(next_state)
 
@@ -326,10 +259,6 @@ class BlackjackAgent:
     # Calculate final Q-values as the average of Q1 and Q2 after training
     # This is done after the simulation is complete for Double Q-Learning
     def calculate_double_q_average(self):
-        """
-        Calculates the average of Q1 and Q2 after training and stores it in self.q_values.
-        Aligns with PDF Point 2.6.
-        """
         # Iterate through all state_keys encountered in either Q1 or Q2
         all_state_keys = set(self.q1_values.keys()).union(set(self.q2_values.keys()))
         for state_key in all_state_keys:
